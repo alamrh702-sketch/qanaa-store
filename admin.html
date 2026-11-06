@@ -1,0 +1,50 @@
+<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><title>لوحة الإدارة</title>
+<style>:root{--n:#071321;--b:#075BFF;--s:#AEB7C2}*{box-sizing:border-box}body{margin:0;font-family:system-ui,Tahoma,sans-serif;background:#f3f6fb;color:var(--n)}header{background:var(--n);color:#fff;padding:12px;text-align:center}
+.w{padding:10px}button{background:var(--b);color:#fff;border:0;border-radius:8px;padding:10px 14px;font-size:15px;margin:2px}button.o{background:#fff;color:var(--n);border:1px solid var(--s)}button.r{background:#c62828}
+input,select,textarea{width:100%;padding:9px;margin:3px 0;font-size:15px;border:1px solid var(--s);border-radius:8px;font-family:inherit}.c{background:#fff;border:1px solid #dde3ec;border-radius:12px;padding:10px;margin:8px 0}small{color:#556}</style></head><body>
+<header>لوحة إدارة مجمع القناعة الحديث</header><div class="w" id="app"></div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script><script src="config.js"></script>
+<script>
+const A=document.getElementById('app');let G=[],B=[],tab='p';
+(async()=>{const{data:{session}}=await db.auth.getSession();session?gate():login()})();
+function login(){A.innerHTML=`<div class="c"><h3>تسجيل الدخول</h3><input id="e" type="email" placeholder="الإيميل"><input id="pw" type="password" placeholder="كلمة المرور"><button onclick="doLogin()">دخول</button></div>`}
+async function doLogin(){const{error}=await db.auth.signInWithPassword({email:e.value,password:pw.value});error?alert('بيانات الدخول غير صحيحة'):gate()}
+async function gate(){const{data}=await db.from('admin_users').select('user_id').maybeSingle();if(!data){await db.auth.signOut();alert('هذا الحساب ليس مديراً');return login()}
+await load();menu()}
+async function load(){G=(await db.from('groups').select('*,categories(name_ar)').order('id')).data||[];B=(await db.from('brands').select('*').order('name')).data||[]}
+function menu(){A.innerHTML=`<button onclick="tab='p';plist()">المنتجات</button><button onclick="tab='g';glist()">الأقسام والمجموعات</button><button onclick="olist()">الطلبات</button><button onclick="bulk()">الأسعار والتصدير</button><button class="o" onclick="db.auth.signOut().then(login)">خروج</button><div id="v"></div>`;plist()}
+async function plist(){const{data}=await db.from('products').select('*,product_packs(*)').order('id',{ascending:false});
+v.innerHTML=`<button onclick="pform()">+ منتج جديد</button>`+(data||[]).map(p=>`<div class="c"><b>${esc(p.name_ar)}</b> ${esc(p.model||'')}<br><small>${p.active?'ظاهر':'مخفي'} | المخزون: ${p.stock??'-'} | تعبئات: ${p.product_packs.length}</small><br><button class="o" onclick="pform(${p.id})">تعديل</button><button class="r" onclick="delP(${p.id})">حذف</button></div>`).join('')}
+async function pform(id){let p={active:true},pks=[];if(id){p=(await db.from('products').select('*,brands(name),product_packs(*,price_tiers(*))').eq('id',id).single()).data;pks=p.product_packs}
+const lines=pks.map(k=>[k.label,k.qty_per_pack,k.price??'',(k.price_tiers||[]).map(t=>t.min_qty+':'+t.price).join(',')].join('|')).join('\n');
+v.innerHTML=`<div class="c"><input id="n" placeholder="اسم المنتج" value="${esc(p.name_ar||'')}"><input id="md" placeholder="الموديل" value="${esc(p.model||'')}">
+<select id="gp"><option value="">— المجموعة —</option>${G.map(x=>`<option value="${x.id}" ${x.id==p.group_id?'selected':''}>${esc(x.categories?.name_ar)} / ${esc(x.name_ar)}</option>`).join('')}</select>
+<input id="br" list="bl" placeholder="الماركة" value="${esc(p.brands?.name||'')}"><datalist id="bl">${B.map(b=>`<option value="${esc(b.name)}">`).join('')}</datalist>
+<input id="st" type="number" placeholder="المخزون" value="${p.stock??''}"><label><input id="ac" type="checkbox" style="width:auto" ${p.active?'checked':''}> ظاهر في المتجر</label>
+${p.image_url?`<img src="${esc(p.image_url)}" width="100">`:''}<input id="im" type="file" accept="image/*"><small>التعبئات: سطر لكل تعبئة بالشكل: الاسم|العدد|السعر|شرائح (كمية:سعر)<br>مثال: كارتون|24|50000|5:48000,10:46000 (اترك السعر فارغاً إن لم يتوفر)</small>
+<textarea id="pk" rows="5" placeholder="قطعة|1|2500">${esc(lines)}</textarea><button onclick="saveP(${id||0},'${esc(p.image_url||'')}')">حفظ</button><button class="o" onclick="plist()">رجوع</button></div>`}
+async function saveP(id,img){try{let bid=null;if(br.value.trim()){const r=await db.from('brands').upsert({name:br.value.trim()},{onConflict:'name'}).select().single();bid=r.data.id}
+const f=im.files[0];if(f){const nm=Date.now()+'_'+Math.random().toString(36).slice(2)+'.'+(f.name.split('.').pop()||'jpg');const u=await db.storage.from('product-images').upload(nm,f);if(u.error)throw u.error;img=db.storage.from('product-images').getPublicUrl(nm).data.publicUrl}
+const row={name_ar:n.value,model:md.value||null,group_id:gp.value||null,brand_id:bid,stock:st.value===''?null:+st.value,active:ac.checked,image_url:img||null};
+let r=id?await db.from('products').update(row).eq('id',id).select().single():await db.from('products').insert(row).select().single();if(r.error)throw r.error;const pid=r.data.id;
+if(id)await db.from('product_packs').delete().eq('product_id',id);
+for(const ln of pk.value.split('\n').map(s=>s.trim()).filter(Boolean)){const[l,q,pc,t]=ln.split('|');const k=await db.from('product_packs').insert({product_id:pid,label:l.trim(),qty_per_pack:+q||1,price:pc?+pc:null}).select().single();if(k.error)throw k.error;
+const tr=(t||'').split(',').filter(Boolean).map(x=>x.split(':')).map(([m,p])=>({pack_id:k.data.id,min_qty:+m,price:+p}));if(tr.length){const z=await db.from('price_tiers').insert(tr);if(z.error)throw z.error}}
+await load();plist()}catch(e){alert('خطأ: '+(e.message||e))}}
+async function delP(id){if(confirm('حذف المنتج نهائياً؟')){await db.from('products').delete().eq('id',id);plist()}}
+async function glist(){const c=(await db.from('categories').select('*').order('sort')).data||[];await load();
+v.innerHTML=`<div class="c"><b>مجموعة جديدة</b><select id="cs">${c.map(x=>`<option value="${x.id}">${esc(x.name_ar)}</option>`).join('')}</select><input id="gn" placeholder="اسم المجموعة"><button onclick="addG()">إضافة</button></div>`+
+G.map(x=>`<div class="c">${esc(x.categories?.name_ar)} / <input id="g${x.id}" value="${esc(x.name_ar)}"><button onclick="updG(${x.id})">حفظ الاسم</button><button class="r" onclick="delG(${x.id})">حذف</button></div>`).join('')}
+async function addG(){if(gn.value){await db.from('groups').insert({category_id:cs.value,name_ar:gn.value});glist()}}
+async function updG(i){await db.from('groups').update({name_ar:document.getElementById('g'+i).value}).eq('id',i);glist()}
+async function delG(i){if(confirm('حذف المجموعة؟')){await db.from('groups').delete().eq('id',i);glist()}}
+async function olist(){const{data}=await db.from('orders').select('*,order_items(*)').order('id',{ascending:false}).limit(100);
+v.innerHTML=(data||[]).map(o=>`<div class="c"><b>${esc(o.order_no)}</b> — ${esc(o.customer_name)} — ${esc(o.phone)}<br><small>${new Date(o.created_at).toLocaleString('ar-IQ')}</small><br>${o.order_items.map(i=>`${esc(i.product_name)} (${esc(i.pack_label)}) × ${i.qty}`).join('<br>')}<br><b>${fmt(o.total||null)}</b>
+<select onchange="db.from('orders').update({status:this.value}).eq('id',${o.id}).then(()=>0)">${['جديد','قيد التجهيز','تم التسليم','ملغي'].map(s=>`<option ${s==o.status?'selected':''}>${s}</option>`).join('')}</select></div>`).join('')||'<p>لا توجد طلبات</p>'}
+function bulk(){v.innerHTML=`<div class="c"><b>تعديل الأسعار جماعياً</b><input id="pc" type="number" placeholder="نسبة % (مثال 5 أو -5)"><button onclick="doBulk()">تطبيق على كل الأسعار</button></div><div class="c"><button onclick="exp()">تصدير المنتجات والأسعار (Excel/CSV)</button></div>`}
+async function doBulk(){const f=1+(+pc.value||0)/100;if(!pc.value||!confirm('تعديل كل الأسعار بنسبة '+pc.value+'%؟'))return;
+for(const t of['product_packs','price_tiers']){const{data}=await db.from(t).select('id,price').not('price','is',null);for(const r of data)await db.from(t).update({price:Math.round(r.price*f)}).eq('id',r.id)}alert('تم')}
+async function exp(){const{data}=await db.from('products').select('name_ar,model,stock,brands(name),groups(name_ar),product_packs(label,qty_per_pack,price)');
+const rows=[['المنتج','الموديل','الماركة','المجموعة','المخزون','التعبئة','العدد','السعر']];data.forEach(p=>(p.product_packs.length?p.product_packs:[{}]).forEach(k=>rows.push([p.name_ar,p.model,p.brands?.name,p.groups?.name_ar,p.stock,k.label,k.qty_per_pack,k.price])));
+const csv='\ufeff'+rows.map(r=>r.map(x=>'"'+String(x??'').replace(/"/g,'""')+'"').join(',')).join('\n');const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));a.download='products.csv';a.click()}
+</script></body></html>

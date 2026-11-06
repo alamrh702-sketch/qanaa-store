@@ -1,0 +1,30 @@
+<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>مجمع القناعة الحديث</title>
+<style>:root{--n:#071321;--b:#075BFF;--s:#AEB7C2}*{box-sizing:border-box}body{margin:0;font-family:system-ui,Tahoma,sans-serif;background:#f3f6fb;color:var(--n);padding-bottom:80px}
+header{background:var(--n);color:#fff;padding:14px;text-align:center;font-size:20px}header small{display:block;color:var(--s);font-size:11px;letter-spacing:1px}
+nav{display:flex;gap:8px;overflow-x:auto;padding:10px}button{background:var(--b);color:#fff;border:0;border-radius:8px;padding:9px 14px;font-size:15px;white-space:nowrap}button.o{background:#fff;color:var(--n);border:1px solid var(--s)}button.on{background:var(--n);color:#fff}
+#g{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:10px;padding:10px}.c{background:#fff;border-radius:12px;padding:8px;border:1px solid #dde3ec}.c img{width:100%;aspect-ratio:1;object-fit:contain}
+select,input{width:100%;padding:8px;margin:3px 0;font-size:15px;border:1px solid var(--s);border-radius:8px}#cb{position:fixed;bottom:10px;left:10px;right:10px}#cb button{width:100%;padding:14px}
+#m{display:none;position:fixed;inset:0;background:#000a;overflow:auto}#m>div{background:#fff;margin:20px 10px;padding:14px;border-radius:12px}</style></head><body>
+<header>مجمع القناعة الحديث<small>AL-QANA’A MODERN COMPLEX</small></header><nav id="nv"></nav><div id="g"></div>
+<div id="cb"><button onclick="openCart()">🛒 السلة (<span id="cn">0</span>)</button></div><div id="m"><div id="mc"></div></div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script><script src="config.js"></script>
+<script>
+let P=[],C=[],G=[],cat=null,cart=[];
+(async()=>{const[a,b,c]=await Promise.all([db.from('categories').select('*').order('sort'),db.from('groups').select('*').order('sort'),
+db.from('products').select('*,brands(name),groups(name_ar,category_id),product_packs(*,price_tiers(*))').eq('active',true).order('id',{ascending:false})]);
+C=a.data||[];G=b.data||[];P=c.data||[];nav();show()})();
+function nav(){nv.innerHTML='<button class="'+(cat?'o':'on')+'" onclick="cat=null;nav();show()">الكل</button>'+C.map(x=>`<button class="${cat==x.id?'on':'o'}" onclick="cat=${x.id};nav();show()">${esc(x.name_ar)}</button>`).join('')}
+function show(){g.innerHTML=P.filter(p=>!cat||p.groups?.category_id==cat).map(p=>`<div class="c">${p.image_url?`<img src="${esc(p.image_url)}" loading="lazy">`:''}<b>${esc(p.name_ar)}</b><div>${esc(p.model||'')} ${esc(p.brands?.name||'')}</div>
+<select id="k${p.id}" onchange="pr(${p.id})">${p.product_packs.map(k=>`<option value="${k.id}">${esc(k.label)}</option>`).join('')}</select><div id="p${p.id}"></div><input id="q${p.id}" type="number" min="1" value="1" oninput="pr(${p.id})"><button onclick="add(${p.id})">أضف للسلة</button></div>`).join('')||'<p style="padding:20px">لا توجد منتجات بعد</p>';P.forEach(p=>p.product_packs.length&&pr(p.id))}
+const pk=id=>P.flatMap(p=>p.product_packs).find(k=>k.id==id);
+function pr(id){const k=pk(document.getElementById('k'+id).value);document.getElementById('p'+id).textContent=fmt(priceOf(k,+document.getElementById('q'+id).value||1))}
+function add(id){const k=pk(document.getElementById('k'+id).value),q=+document.getElementById('q'+id).value||1,p=P.find(x=>x.id==id);cart.push({pack_id:k.id,qty:q,name:p.name_ar+' '+(p.model||''),label:k.label});cn.textContent=cart.length}
+function openCart(){const t=cart.reduce((s,i)=>s+(priceOf(pk(i.pack_id),i.qty)||0)*i.qty,0);
+mc.innerHTML=(cart.map((i,n)=>`<p>${esc(i.name)} — ${esc(i.label)} × ${i.qty} — ${fmt(priceOf(pk(i.pack_id),i.qty))} <button class="o" onclick="cart.splice(${n},1);cn.textContent=cart.length;openCart()">حذف</button></p>`).join('')||'<p>السلة فارغة</p>')+
+`<b>الإجمالي التقريبي: ${fmt(t||null)}</b><input id="nm" placeholder="الاسم"><input id="ph" placeholder="رقم الهاتف" type="tel"><input id="nt" placeholder="ملاحظات"><button onclick="send()">إرسال الطلب عبر واتساب</button> <button class="o" onclick="m.style.display='none'">إغلاق</button>`;m.style.display='block'}
+async function send(){if(!cart.length||!nm.value||!ph.value)return alert('اكتب الاسم والهاتف وأضف منتجاً');
+const{data,error}=await db.rpc('place_order',{p_name:nm.value,p_phone:ph.value,p_notes:nt.value,p_items:cart.map(i=>({pack_id:i.pack_id,qty:i.qty}))});
+if(error)return alert('تعذر حفظ الطلب: '+error.message);
+const txt=`طلب جديد ${data}\nالاسم: ${nm.value}\nالهاتف: ${ph.value}\n`+cart.map(i=>`- ${i.name} (${i.label}) × ${i.qty}`).join('\n')+(nt.value?`\nملاحظات: ${nt.value}`:'');
+cart=[];cn.textContent=0;location.href='https://wa.me/'+QM.wa+'?text='+encodeURIComponent(txt)}
+</script></body></html>
